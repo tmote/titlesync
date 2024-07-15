@@ -1,16 +1,16 @@
 import logging
 import requests
-from flask import Flask, request, jsonify
+import json
+import os
+import azure.functions as func
 
-app = Flask(__name__)
+RADARR_API_KEY = os.getenv('RADARR_API_KEY')
+SONARR_API_KEY = os.getenv('SONARR_API_KEY')
+OVERSEERR_API_KEY = os.getenv('OVERSEERR_API_KEY')
 
-RADARR_API_KEY = 'your_radarr_api_key'
-SONARR_API_KEY = 'your_sonarr_api_key'
-OVERSEERR_API_KEY = 'your_overseerr_api_key'
-
-RADARR_URL = 'http://localhost:7878/api/v3'
-SONARR_URL = 'http://localhost:8989/api/v3'
-OVERSEERR_URL = 'http://localhost:5055/api/v1'
+RADARR_URL = os.getenv('RADARR_URL')
+SONARR_URL = os.getenv('SONARR_URL')
+OVERSEERR_URL = os.getenv('OVERSEERR_URL')
 
 def check_radarr(movie_id):
     response = requests.get(f'{RADARR_URL}/movie/{movie_id}', headers={'X-Api-Key': RADARR_API_KEY})
@@ -23,9 +23,17 @@ def check_sonarr(series_id):
 def remove_overseerr_status(media_id, media_type):
     requests.delete(f'{OVERSEERR_URL}/request/{media_id}', headers={'X-Api-Key': OVERSEERR_API_KEY})
 
-@app.route('/webhook', methods=['POST'])
-def webhook():
-    data = request.json
+def main(req: func.HttpRequest) -> func.HttpResponse:
+    logging.info('Python HTTP trigger function processed a request.')
+
+    try:
+        data = req.get_json()
+    except ValueError:
+        return func.HttpResponse(
+            "Invalid JSON",
+            status_code=400
+        )
+
     media_type = data.get('mediaType')
     media_id = data.get('mediaId')
 
@@ -36,7 +44,8 @@ def webhook():
         if check_sonarr(media_id):
             remove_overseerr_status(media_id, media_type)
 
-    return jsonify({'status': 'success'}), 200
-
-if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000)
+    return func.HttpResponse(
+        json.dumps({'status': 'success'}),
+        mimetype="application/json",
+        status_code=200
+    )
